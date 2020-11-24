@@ -119,7 +119,7 @@ def opening(this, grids):
     return f, gameover
 
 
-def game_init(g, w, h, pic):
+def grid_init(g, w, h, pic):
     grids = g
     a = []
     for i in range(h + 1):
@@ -127,6 +127,32 @@ def game_init(g, w, h, pic):
 
     for i in zip(list(range(w)) * h, a):
         grids[i] = (Grid(i[0], i[1], pic))
+
+
+def game_init(screen):
+    global timing_begin
+    Grid.count_open = 0
+    Grid.mined = []
+    Grid.flaged = {}
+
+    timing_begin = False
+
+    screen.blit(t[mines // 100], num_pos1)
+    screen.blit(t[mines % 100 // 10], num_pos2)
+    screen.blit(t[mines % 100 % 10], num_pos3)
+
+    screen.blit(t[0], num_pos4)
+    screen.blit(t[0], num_pos5)
+    screen.blit(t[0], num_pos6)
+
+    face = Fpic['smile']
+    screen.blit(face, facePos)
+
+    grids = {}
+    grid_init(grids, width, height, Gpic)
+    for i in grids:
+        screen.blit(grids[i].image, (grids[i].x, grids[i].y))
+    return grids
 
 
 def mine_init(g, m, minepic):
@@ -190,8 +216,9 @@ def init_element_pos(width, height):
 
 
 def re_size(width, height):
+    """调整游戏难度时重新绘制游戏画面"""
     screen = pygame.display.set_mode((16 * width + 24, 16 * height + 94), 0, 32)
-    src_pic = pygame.image.load('cloneskin.png').convert()
+
     init_element_pos(width, height)
 
     screen.fill((255, 255, 255), (0, 0, 16 * width + 24, 25))
@@ -235,20 +262,36 @@ def re_size(width, height):
     screen.blit(panel, panelPos1)
     screen.blit(panel, panelPos2)
 
-    return screen, src_pic
+    return screen
 
 
-def time_count():
-    pass
+def time_count(timing_begin, start_time):
+    """计时"""
+    if timing_begin:
+        time_now = time.time() - start_time
+        if time_now < 999:
+            screen.blit(t[(int(time_now) + 1) // 100], num_pos4)
+            screen.blit(t[(int(time_now) + 1) % 100 // 10], num_pos5)
+            screen.blit(t[(int(time_now) + 1) % 100 % 10], num_pos6)
 
 
-pygame.init()
-c = 1
-resize = True
 
 width = 8
 height = 8
 mines = 10
+
+pygame.init()
+pygame.display.set_caption('mine sweeper')
+screen = pygame.display.set_mode((16 * width + 24, 16 * height + 94), 0, 32)
+src_pic = pygame.image.load('cloneskin.png').convert()
+Fpic = init_face_pic(src_pic)
+t = init_time_pic(src_pic)
+Gpic = init_grid_pic(src_pic)
+
+c = 1
+resize = True
+
+start_time = time.time()
 
 gridRect = Rect((12, 83), (16 * width, height * 16))
 facePos = ((16 * width + 24) / 2 - 12.5, 41)
@@ -269,71 +312,30 @@ mlist = [Menu(0, 0, -99, -99, -99, u'选项', width=40),
 while True:
     time.sleep(0.002)
 
-    pygame.display.set_caption('mine sweeper')
-
     if resize:
-        resize = False
-
-        screen, src_pic = re_size(width, height)
-        Fpic = init_face_pic(src_pic)
-        t = init_time_pic(src_pic)
-        Gpic = init_grid_pic(src_pic)
-
+        screen = re_size(width, height)
         menu = False
         initial = True
+        resize = False
 
     if initial:
         initial = False
-
         gameover = False
         facepress = False
         leftdown = False
         double = False
-
-        Grid.count_open = 0
-        Grid.mined = []
-        Grid.flaged = {}
-
-        face = Fpic['smile']
-
-        time_count = 0
-
-        screen.blit(t[mines // 100], num_pos1)
-        screen.blit(t[mines % 100 // 10], num_pos2)
-        screen.blit(t[mines % 100 % 10], num_pos3)
-
-        screen.blit(t[0], num_pos4)
-        screen.blit(t[0], num_pos5)
-        screen.blit(t[0], num_pos6)
-
-        screen.blit(face, facePos)
-
-        grids = {}
-        game_init(grids, width, height, Gpic)
-        for i in grids:
-            screen.blit(grids[i].image, (grids[i].x, grids[i].y))
+        grids = game_init(screen)
 
     if not gameover:
 
-        if time_count > 1:
-            time_now = time.time() - time_begin
-            if time_now < 999:
-                screen.blit(t[(int(time_now) + 1) // 100], num_pos4)
-                screen.blit(t[(int(time_now) + 1) % 100 // 10], num_pos5)
-                screen.blit(t[(int(time_now) + 1) % 100 % 10], num_pos6)
-        elif time_count == 1:
-            time_begin = time.time()
-            time_count += 1
+        time_count(timing_begin, start_time)
 
         for event in pygame.event.get():
-
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
-
             elif event.type == pygame.KEYDOWN and event.key == 283 and menu == False:
                 initial = True
-
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if menu:
                     if not (mRect.collidepoint(event.pos) or mlist[0].rect.collidepoint(event.pos)):
@@ -432,20 +434,19 @@ while True:
                         if gridRect.collidepoint(event.pos):
                             x1, y1 = int((event.pos[0] - 12) / 16), int((event.pos[1] - 83) / 16)
                             if grids[(x1, y1)].flag == False and grids[(x1, y1)].open == False:
-                                if time_count == 0:
+                                if not timing_begin:
+                                    timing_begin = True
+                                    start_time = time.time()
                                     gg = grids[(x1, y1)]
                                     del grids[(x1, y1)]
                                     mine_init(grids, mines, Gpic['mine'])
                                     grids[(x1, y1)] = gg
                                     num_init(grids, Gpic)
-
                                 try:
                                     f, gameover = grids[(x1, y1)].open_grid()
                                 except:
                                     f = 'smile'
                                 face = Fpic[f]
-                                time_count += 1
-
                                 if grids[(x1, y1)].type == '0':
                                     opening(grids[(x1, y1)], grids)
 
